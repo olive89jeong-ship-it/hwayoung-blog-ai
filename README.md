@@ -1,14 +1,17 @@
-# 화영의블로그자동화
+# 화영의블로그자동화 - Local Version
 
-모바일 사진/동영상 임시저장, 와이파이 클라우드 업로드, PC 불러오기, AI 블로그 초안 생성을 위한 React + Vite 앱입니다.
+Firebase 없이 같은 기기에서 사진/동영상과 메모를 임시저장하고 AI 초안을 생성하는 버전입니다.
 
-## Vercel 환경변수
+## 기능
 
-Firebase 사용 시 아래 값을 Vercel Environment Variables에 등록하세요.
+- 사진/동영상 업로드
+- 사진 980px 압축
+- IndexedDB 기기 임시저장
+- 여러 개 임시저장/불러오기/삭제
+- 참고 블로그 본문 3개 입력
+- OpenAI API Key 직접 입력 후 초안 생성
 
-- VITE_FIREBASE_API_KEY
-- VITE_FIREBASE_AUTH_DOMAIN
-- VITE_FIREBASE_PROJECT_ID
-- VITE_FIREBASE_STORAGE_BUCKET
-- VITE_FIREBASE_MESSAGING_SENDER_ID
-- VITE_FIREBASE_APP_ID
+## 주의
+
+- 기기 저장본은 같은 기기/같은 브라우저에서만 불러올 수 있습니다.
+- OpenAI API Key는 현재 브라우저에서 직접 호출하는 테스트용 구조입니다.

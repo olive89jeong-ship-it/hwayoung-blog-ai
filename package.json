@@ -1,7 +1,7 @@
 {
-  "name": "hwayoung-blog-ai",
+  "name": "hwayoung-blog-ai-local",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,8 +12,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.8",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "firebase": "^11.0.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.13",
