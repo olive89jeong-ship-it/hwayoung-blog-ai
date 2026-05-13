@@ -104,6 +104,7 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [template, setTemplate] = useState("restaurant");
+  const [targetLength, setTargetLength] = useState("2500");
   const [apiKey, setApiKey] = useState("");
   const [personalPrompt, setPersonalPrompt] = useState(
     "아이는 없고, 남편과 데이트로 방문한 상황입니다. 아이 동반, 가족 나들이, 키즈 관련 내용은 제외해 주세요."
@@ -324,21 +325,18 @@ export default function App() {
     const prompts = {
       restaurant: `
 [맛집 리뷰 작성 조건]
-- 분량 500~700자
 - 메뉴 맛 표현을 구체적으로 작성
 - 위치/가격/웨이팅/주차/운영시간 포함
 - 마지막 총평 + 별점 + 해시태그 5개
 `,
       travel: `
 [여행 후기 작성 조건]
-- 분량 700~1000자
 - 감성 + 실용 정보 5:5
 - 교통/숙소/비용/방문팁 포함
 - 마지막 추천 대상 + 해시태그 7개
 `,
       product: `
 [제품 리뷰 작성 조건]
-- 분량 500~700자
 - 장단점 균형 있게 작성
 - 실제 사용 느낌 강조
 - 구매 팁 포함
@@ -346,7 +344,6 @@ export default function App() {
 `,
       daily: `
 [일상 기록 작성 조건]
-- 분량 300~500자
 - 가볍고 감성적인 일상 톤
 - 읽는 사람이 가보고 싶게 작성
 - 해시태그 5~8개
@@ -358,6 +355,10 @@ ${baseStyle}
 
 [글 유형]
 ${templateLabel}
+
+[목표 분량]
+전체 글자 수는 공백 포함 최소 ${targetLength}자 이상으로 작성한다.
+문단을 충분히 길게 쓰되 같은 말 반복은 피한다.
 
 [사용자 메모]
 ${memo || "없음"}
@@ -373,12 +374,29 @@ ${imageCount}장
 
 ${prompts[template] || ""}
 
+[사진 묶기 규칙]
+- 사진 1장마다 소제목을 만들지 않는다.
+- 비슷한 사진, 같은 메뉴, 같은 장소, 같은 분위기의 사진은 하나의 섹션으로 묶는다.
+- 보통 3~6개 정도의 섹션으로 구성한다.
+- 각 섹션은 관련 사진 여러 장을 포함할 수 있다.
+- imageIndexes는 해당 섹션에 들어갈 사진 번호 배열이다.
+- 사진 번호는 1부터 시작한다.
+- 예: 첫 번째, 두 번째 사진이 외관이면 "imageIndexes": [1,2]
+- 모든 사진을 반드시 한 번 이상 imageIndexes에 포함한다.
+- 동영상은 본문 작성 참고용으로만 보고, imageIndexes에는 이미지 번호만 넣는다.
+
 [출력 형식]
 JSON만 반환:
 {
   "title": "제목",
   "intro": "서론",
-  "sections": [{ "subtitle": "소제목", "content": "본문" }],
+  "sections": [
+    {
+      "subtitle": "소제목",
+      "content": "본문",
+      "imageIndexes": [1,2]
+    }
+  ],
   "conclusion": "결론",
   "tags": ["태그1","태그2"]
 }
@@ -448,12 +466,47 @@ JSON만 반환:
 
       pushLog("섹션과 이미지 연결 중...");
 
+      const used = new Set();
+
+      const groupedSections = (parsed.sections || []).map((section, sectionIndex) => {
+        const indexes = Array.isArray(section.imageIndexes) && section.imageIndexes.length
+          ? section.imageIndexes
+          : [sectionIndex + 1];
+
+        const images = indexes
+          .map((number) => {
+            const image = imageMedia[number - 1];
+            if (image) used.add(number - 1);
+            return image;
+          })
+          .filter(Boolean);
+
+        return {
+          ...section,
+          images,
+        };
+      });
+
+      imageMedia.forEach((image, index) => {
+        if (!used.has(index)) {
+          if (groupedSections.length) {
+            groupedSections[groupedSections.length - 1].images = [
+              ...(groupedSections[groupedSections.length - 1].images || []),
+              image,
+            ];
+          } else {
+            groupedSections.push({
+              subtitle: `사진으로 본 주요 장면`,
+              content: "",
+              images: [image],
+            });
+          }
+        }
+      });
+
       setGenerated({
         ...parsed,
-        sections: imageMedia.map((img, idx) => ({
-          ...(parsed.sections?.[idx] || { subtitle: `사진 ${idx + 1}`, content: "" }),
-          image: img,
-        })),
+        sections: groupedSections,
       });
 
       pushLog("블로그 초안 생성 완료 ✨");
@@ -494,7 +547,7 @@ JSON만 반환:
   const titleImage =
     media.find((item) => item.id === selectedTitleImageId && item.type === "image") ||
     media.find((item) => item.type === "image") ||
-    generated?.sections?.find((section) => section.image)?.image ||
+    generated?.sections?.find((section) => section.images?.length)?.images?.[0] ||
     null;
 
   return (
@@ -665,6 +718,30 @@ JSON만 반환:
                   </Button>
                 ))}
               </div>
+
+              <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 text-sm font-semibold">목표 글자 수</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: "1500", label: "1,500자+" },
+                    { value: "2500", label: "2,500자+" },
+                    { value: "3500", label: "3,500자+" },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setTargetLength(item.value)}
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+                        targetLength === item.value
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <p className="mb-2 text-xs leading-5 text-slate-500">
                 참고 블로그 HTML을 붙여넣어도 됩니다. iframe/script/style/태그는 자동 제거하고 본문 일부만 AI에 전달합니다.
               </p>
@@ -816,11 +893,20 @@ JSON만 반환:
 
                   {(generated.sections || []).map((s, idx) => (
                     <section key={idx} className="rounded-2xl border p-4">
-                      {s.image && (
-                        <img src={s.image.url} className="mb-4 h-72 w-full rounded-xl object-cover" alt={s.subtitle} />
+                      {!!s.images?.length && (
+                        <div className={`mb-4 grid gap-2 ${s.images.length === 1 ? "grid-cols-1" : "grid-cols-2 md:grid-cols-3"}`}>
+                          {s.images.map((img, imageIndex) => (
+                            <img
+                              key={`${idx}-${imageIndex}`}
+                              src={img.url}
+                              className="h-48 w-full rounded-xl object-cover md:h-56"
+                              alt={`${s.subtitle} 이미지 ${imageIndex + 1}`}
+                            />
+                          ))}
+                        </div>
                       )}
                       <h3 className="mb-2 text-xl font-bold">{s.subtitle}</h3>
-                      <p className="leading-7">{s.content}</p>
+                      <p className="whitespace-pre-line leading-7">{s.content}</p>
                     </section>
                   ))}
 
