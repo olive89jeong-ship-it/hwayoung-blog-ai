@@ -1,7 +1,7 @@
 {
-  "name": "hwayoung-blog-ai-local",
+  "name": "hwayoung-blog-ai-title-select",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

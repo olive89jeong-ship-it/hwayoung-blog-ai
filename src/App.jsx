@@ -99,6 +99,7 @@ export default function App() {
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [media, setMedia] = useState([]);
+  const [selectedTitleImageId, setSelectedTitleImageId] = useState(null);
   const [drafts, setDrafts] = useState([]);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -109,6 +110,7 @@ export default function App() {
   );
   const [referenceContents, setReferenceContents] = useState(["", "", ""]);
   const [generated, setGenerated] = useState(null);
+  const [generationLogs, setGenerationLogs] = useState([]);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -192,6 +194,12 @@ export default function App() {
       );
 
       setMedia((prev) => [...prev, ...rows]);
+
+      const firstImage = rows.find((item) => item.type === "image");
+      if (!selectedTitleImageId && firstImage) {
+        setSelectedTitleImageId(firstImage.id);
+      }
+
       setStatus(`파일 추가 완료 · ${rows.length}개`);
     } finally {
       setLoading(false);
@@ -206,6 +214,8 @@ export default function App() {
       title: title || memo.slice(0, 20) || `임시저장 ${drafts.length + 1}`,
       memo,
       media,
+      selectedTitleImageId,
+      generated,
       savedAt: new Date().toISOString(),
     };
 
@@ -213,13 +223,17 @@ export default function App() {
     await refreshDrafts();
 
     const savedCount = media.length;
+    const hasGenerated = !!generated;
+
     setTitle("");
     setMemo("");
     setMedia([]);
+    setSelectedTitleImageId(null);
     setGenerated(null);
+    setGenerationLogs([]);
     setCopied(false);
 
-    setStatus(`기기에 임시저장 완료 · 파일 ${savedCount}개 · 새 글 작성 모드로 전환`);
+    setStatus(`기기에 임시저장 완료 · 파일 ${savedCount}개${hasGenerated ? " · AI글 포함" : ""} · 새 글 작성 모드로 전환`);
   };
 
   const loadDraft = async (id) => {
@@ -230,8 +244,11 @@ export default function App() {
     setTitle(draft.title || "");
     setMemo(draft.memo || "");
     setMedia(draft.media || []);
-    setGenerated(null);
-    setStatus("기기 저장본 불러오기 완료");
+    setSelectedTitleImageId(draft.selectedTitleImageId || draft.media?.find((item) => item.type === "image")?.id || null);
+    setGenerated(draft.generated || null);
+    setGenerationLogs([]);
+    setCopied(false);
+    setStatus(draft.generated ? "기기 저장본과 AI 생성 결과 불러오기 완료" : "기기 저장본 불러오기 완료");
   };
 
   const deleteDraft = async (id) => {
@@ -241,7 +258,17 @@ export default function App() {
   };
 
   const removeMedia = (index) => {
-    setMedia((prev) => prev.filter((_, i) => i !== index));
+    setMedia((prev) => {
+      const removed = prev[index];
+      const next = prev.filter((_, i) => i !== index);
+
+      if (removed?.id === selectedTitleImageId) {
+        const nextTitleImage = next.find((item) => item.type === "image");
+        setSelectedTitleImageId(nextTitleImage?.id || null);
+      }
+
+      return next;
+    });
   };
 
   const cleanReferenceContent = (value = "") => {
@@ -273,43 +300,116 @@ export default function App() {
     const templateLabel = templates.find((t) => t.id === template)?.label || "블로그 후기";
     const imageCount = media.filter((m) => m.type === "image").length;
 
-    return `너는 네이버 블로그 전문 에디터다.
+    const baseStyle = `
+너는 블로그 글에서 유용한 정보를 뽑아내고 이를 바탕으로 새로운 콘텐츠를 작성하는 전문 에디터다.
 
-글 유형: ${templateLabel}
-사용자 메모: ${memo || "없음"}
-사용자 상황 및 제외 조건: ${personalPrompt}
-참고 콘텐츠:
+[역할]
+- 원본 블로그 글에서 정보를 최대한 추출하되 그대로 복붙하지 않는다.
+- 실제 경험자가 친구에게 이야기하듯 자연스럽게 작성한다.
+- 문장은 짧고 리듬감 있게 쓴다.
+- 딱딱한 문어체 대신 부드러운 구어체 사용.
+- 정보는 정확하게, 표현은 생동감 있게 작성.
+
+[공통 규칙]
+- "~인데", "~거든", "~더라고" 같은 자연스러운 어미 사용
+- 서두는 훅(hook) 한 줄로 시작
+- 과장된 광고 말투 금지
+- 불확실한 정보 창작 금지
+- 소제목 번호 금지
+- 남편과 데이트 방문 관점 유지
+- 아이/키즈/가족 나들이 내용 제외
+- 참고 콘텐츠의 위치, 가격, 운영시간, 분위기, 꿀팁을 자연스럽게 녹인다.
+`;
+
+    const prompts = {
+      restaurant: `
+[맛집 리뷰 작성 조건]
+- 분량 500~700자
+- 메뉴 맛 표현을 구체적으로 작성
+- 위치/가격/웨이팅/주차/운영시간 포함
+- 마지막 총평 + 별점 + 해시태그 5개
+`,
+      travel: `
+[여행 후기 작성 조건]
+- 분량 700~1000자
+- 감성 + 실용 정보 5:5
+- 교통/숙소/비용/방문팁 포함
+- 마지막 추천 대상 + 해시태그 7개
+`,
+      product: `
+[제품 리뷰 작성 조건]
+- 분량 500~700자
+- 장단점 균형 있게 작성
+- 실제 사용 느낌 강조
+- 구매 팁 포함
+- 마지막 구매 추천 여부 + 해시태그 5개
+`,
+      daily: `
+[일상 기록 작성 조건]
+- 분량 300~500자
+- 가볍고 감성적인 일상 톤
+- 읽는 사람이 가보고 싶게 작성
+- 해시태그 5~8개
+`,
+    };
+
+    return `
+${baseStyle}
+
+[글 유형]
+${templateLabel}
+
+[사용자 메모]
+${memo || "없음"}
+
+[사용자 조건]
+${personalPrompt}
+
+[참고 콘텐츠]
 ${referenceText || "없음"}
-사진 개수: ${imageCount}장
 
-작성 규칙:
-- 소제목에는 번호를 붙이지 않는다.
-- 아이 동반, 키즈, 가족 나들이 내용은 쓰지 않는다.
-- 남편과 데이트 방문 관점으로 쓴다.
-- 참고 콘텐츠에서 위치, 가격, 메뉴, 주차, 꿀팁, 평가만 요약해서 자연스럽게 녹인다.
-- iframe, 광고, 스크립트, 불필요한 HTML 내용은 무시한다.
-- 그대로 베끼지 말고 새 글로 재구성한다.
-- sections는 이미지 개수와 같게 만든다.
-- 서론은 300자 이상, 각 사진 섹션은 150자 이상, 결론은 250자 이상으로 작성한다.
+[사진 개수]
+${imageCount}장
 
+${prompts[template] || ""}
+
+[출력 형식]
 JSON만 반환:
 {
   "title": "제목",
   "intro": "서론",
   "sections": [{ "subtitle": "소제목", "content": "본문" }],
   "conclusion": "결론",
-  "tags": ["태그1", "태그2", "태그3", "태그4", "태그5"]
-}`;
+  "tags": ["태그1","태그2"]
+}
+`;
   };
 
   const generatePost = async () => {
     setError("");
     setLoading(true);
+    setGenerationLogs([]);
+
+    const pushLog = (message) => {
+      setGenerationLogs((prev) => [
+        ...prev,
+        {
+          id: Date.now() + Math.random(),
+          text: message,
+        },
+      ]);
+    };
 
     try {
       if (!apiKey.trim()) {
         throw new Error("OpenAI API Key를 입력하세요.");
       }
+
+      pushLog("AI 초안 생성을 시작했어요...");
+      pushLog("참고 블로그 콘텐츠 분석 중...");
+      pushLog("사진 분위기와 장소 특징 분석 중...");
+      pushLog("자연스러운 블로그 말투 구성 중...");
+      pushLog("네이버 스타일 문장 흐름 최적화 중...");
 
       const imageMedia = media.filter((m) => m.type === "image");
 
@@ -320,6 +420,8 @@ JSON만 반환:
           image_url: { url: m.url },
         })),
       ];
+
+      pushLog("OpenAI API 요청 전송 중...");
 
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -338,9 +440,13 @@ JSON만 반환:
         throw new Error(await response.text());
       }
 
+      pushLog("AI 응답 수신 완료 · 콘텐츠 정리 중...");
+
       const data = await response.json();
       const raw = data.choices?.[0]?.message?.content || "";
       const parsed = JSON.parse(raw.replaceAll("```json", "").replaceAll("```", "").trim());
+
+      pushLog("섹션과 이미지 연결 중...");
 
       setGenerated({
         ...parsed,
@@ -349,6 +455,8 @@ JSON만 반환:
           image: img,
         })),
       });
+
+      pushLog("블로그 초안 생성 완료 ✨");
     } catch (err) {
       setError(err.message || "생성 실패");
     } finally {
@@ -382,6 +490,12 @@ JSON만 반환:
     if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
     return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
   };
+
+  const titleImage =
+    media.find((item) => item.id === selectedTitleImageId && item.type === "image") ||
+    media.find((item) => item.type === "image") ||
+    generated?.sections?.find((section) => section.image)?.image ||
+    null;
 
   return (
     <div className="min-h-screen bg-slate-50 p-3 text-slate-900 sm:p-6">
@@ -477,7 +591,9 @@ JSON만 반환:
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold">{draft.title}</div>
-                          <div className="mt-1 text-[11px] text-slate-500">파일 {mediaItems.length}개</div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            파일 {mediaItems.length}개{draft.generated ? " · AI글 있음" : ""}
+                          </div>
                         </div>
 
                         <div className="flex shrink-0 gap-1">
@@ -501,16 +617,23 @@ JSON만 반환:
                       {!!thumbs.length && (
                         <div className="mt-2 flex gap-1 overflow-hidden">
                           {thumbs.map((item, index) => (
-                            <div key={`${draft.id}-${index}`} className="h-[30px] w-[30px] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200">
+                            <div
+                              key={`${draft.id}-${index}`}
+                              className="h-[60px] w-[90px] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200"
+                            >
                               {item.type === "video" ? (
-                                <video src={item.url} className="h-[30px] w-[30px] object-cover" muted playsInline />
+                                <video src={item.url} className="h-[60px] w-[90px] object-cover" muted playsInline />
                               ) : (
-                                <img src={item.url} className="h-[30px] w-[30px] object-cover" alt={`저장 썸네일 ${index + 1}`} />
+                                <img
+                                  src={item.url}
+                                  className="h-[60px] w-[90px] object-cover"
+                                  alt={`저장 썸네일 ${index + 1}`}
+                                />
                               )}
                             </div>
                           ))}
                           {mediaItems.length > 6 && (
-                            <div className="flex h-[30px] w-[30px] items-center justify-center rounded-md bg-slate-100 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                            <div className="flex h-[60px] w-[90px] items-center justify-center rounded-md bg-slate-100 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
                               +{mediaItems.length - 6}
                             </div>
                           )}
@@ -543,7 +666,7 @@ JSON만 반환:
                 ))}
               </div>
               <p className="mb-2 text-xs leading-5 text-slate-500">
-                참고 블로그 HTML을 붙여넣어도 됩니다. 단, 긴 iframe/광고 코드는 자동 제거하고 본문 일부만 AI에 전달합니다.
+                참고 블로그 HTML을 붙여넣어도 됩니다. iframe/script/style/태그는 자동 제거하고 본문 일부만 AI에 전달합니다.
               </p>
               <textarea
                 value={personalPrompt}
@@ -576,34 +699,89 @@ JSON만 반환:
                 <h2 className="text-lg font-bold">업로드 파일</h2>
                 <span className="text-sm text-slate-500">파일 {media.length}개</span>
               </div>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                {media.map((item, index) => (
-                  <div key={item.id} className="relative overflow-hidden rounded-xl bg-slate-100">
-                    {item.type === "video" ? (
-                      <video src={item.url} className="h-24 w-full object-cover" muted playsInline />
-                    ) : (
-                      <img src={item.url} className="h-24 w-full object-cover" alt={item.name} />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeMedia(index)}
-                      className="absolute right-1 top-1 rounded-full bg-black/70 px-2 text-white"
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                {media.map((item, index) => {
+                  const isSelected = selectedTitleImageId === item.id;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`relative overflow-hidden rounded-2xl border bg-slate-100 ${
+                        isSelected ? "border-blue-500 ring-2 ring-blue-300" : "border-slate-200"
+                      }`}
                     >
-                      ×
-                    </button>
-                    <div className="truncate p-1 text-[11px]">
-                      {item.type === "video" ? "동영상" : "사진"} {index + 1}
+                      {item.type === "video" ? (
+                        <video src={item.url} className="h-32 w-full object-cover" muted playsInline />
+                      ) : (
+                        <img src={item.url} className="h-32 w-full object-cover" alt={item.name} />
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => removeMedia(index)}
+                        className="absolute right-2 top-2 rounded-full bg-black/70 px-2 text-white"
+                      >
+                        ×
+                      </button>
+
+                      <div className="p-2">
+                        <div className="truncate text-[11px] font-medium">
+                          {item.type === "video" ? "동영상" : "사진"} {index + 1}
+                        </div>
+
+                        <div className="mt-1 text-[10px] text-slate-400">
+                          {item.width ? `${item.width}×${item.height} · ${formatBytes(item.size)}` : formatBytes(item.size)}
+                        </div>
+
+                        {item.type === "image" && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTitleImageId(item.id)}
+                            className={`mt-2 w-full rounded-lg px-2 py-1 text-[11px] font-semibold ${
+                              isSelected
+                                ? "bg-blue-600 text-white"
+                                : "border border-slate-200 bg-white text-slate-700"
+                            }`}
+                          >
+                            {isSelected ? "대표 이미지 선택됨" : "대표 이미지로 선택"}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="px-1 pb-1 text-[10px] text-slate-400">
-                      {item.width ? `${item.width}×${item.height} · ${formatBytes(item.size)}` : formatBytes(item.size)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {!media.length && (
                   <div className="col-span-full rounded-xl bg-slate-100 p-8 text-center text-sm text-slate-500">
                     업로드된 파일이 없습니다.
                   </div>
                 )}
+              </div>
+            </Card>
+
+            <Card>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-lg font-bold">AI 작업 상태</h2>
+                {loading && (
+                  <div className="flex items-center gap-2 text-sm text-blue-700">
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-blue-600"></div>
+                    생성 중
+                  </div>
+                )}
+              </div>
+
+              {!generationLogs.length && (
+                <p className="text-sm text-slate-500">아직 작업 로그가 없습니다.</p>
+              )}
+
+              <div className="space-y-2">
+                {generationLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="rounded-2xl bg-slate-100 px-4 py-3 text-sm leading-6 text-slate-700"
+                  >
+                    {log.text}
+                  </div>
+                ))}
               </div>
             </Card>
 
@@ -617,13 +795,25 @@ JSON만 반환:
               {!generated && <p className="text-sm text-slate-500">아직 생성 결과가 없습니다.</p>}
               {generated && (
                 <div className="space-y-5">
-                  <section className="rounded-2xl bg-slate-900 p-5 text-white">
-                    <h2 className="text-2xl font-bold">{generated.title}</h2>
+                  <section className="overflow-hidden rounded-2xl bg-slate-900 text-white">
+                    {titleImage && (
+                      <img
+                        src={titleImage.url}
+                        className="h-72 w-full object-cover"
+                        alt="타이틀 대표 이미지"
+                      />
+                    )}
+                    <div className="p-5">
+                      <div className="mb-2 text-sm text-slate-300">타이틀 대표 이미지</div>
+                      <h2 className="text-2xl font-bold">{generated.title}</h2>
+                    </div>
                   </section>
+
                   <section>
                     <h3 className="mb-2 text-xl font-bold">서론</h3>
                     <p className="leading-7">{generated.intro}</p>
                   </section>
+
                   {(generated.sections || []).map((s, idx) => (
                     <section key={idx} className="rounded-2xl border p-4">
                       {s.image && (
@@ -633,10 +823,12 @@ JSON만 반환:
                       <p className="leading-7">{s.content}</p>
                     </section>
                   ))}
+
                   <section>
                     <h3 className="mb-2 text-xl font-bold">결론</h3>
                     <p className="leading-7">{generated.conclusion}</p>
                   </section>
+
                   <section>
                     <h3 className="mb-2 text-xl font-bold">태그</h3>
                     <p>{(generated.tags || []).map((t) => `#${t}`).join(" ")}</p>
