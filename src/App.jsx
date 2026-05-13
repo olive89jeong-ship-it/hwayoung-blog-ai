@@ -112,6 +112,11 @@ export default function App() {
   const [referenceContents, setReferenceContents] = useState(["", "", ""]);
   const [generated, setGenerated] = useState(null);
   const [generationLogs, setGenerationLogs] = useState([]);
+  const [naverHtml, setNaverHtml] = useState("");
+  const [htmlCopied, setHtmlCopied] = useState(false);
+  const [imageSizeMode, setImageSizeMode] = useState("full");
+  const [paragraphGapMode, setParagraphGapMode] = useState("normal");
+  const [toneMode, setToneMode] = useState("natural");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -124,7 +129,7 @@ export default function App() {
     setDrafts(rows.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt)));
   };
 
-  const compressImage = (file, maxSize = 980, quality = 0.62) => {
+  const compressImage = (file, maxWidth = 1000, quality = 0.68) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
 
@@ -132,7 +137,7 @@ export default function App() {
         const img = new Image();
 
         img.onload = () => {
-          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+          const scale = Math.min(1, maxWidth / img.width);
           const width = Math.round(img.width * scale);
           const height = Math.round(img.height * scale);
 
@@ -231,6 +236,7 @@ export default function App() {
     setMedia([]);
     setSelectedTitleImageId(null);
     setGenerated(null);
+    setNaverHtml("");
     setGenerationLogs([]);
     setCopied(false);
 
@@ -247,6 +253,7 @@ export default function App() {
     setMedia(draft.media || []);
     setSelectedTitleImageId(draft.selectedTitleImageId || draft.media?.find((item) => item.type === "image")?.id || null);
     setGenerated(draft.generated || null);
+    setNaverHtml("");
     setGenerationLogs([]);
     setCopied(false);
     setStatus(draft.generated ? "기기 저장본과 AI 생성 결과 불러오기 완료" : "기기 저장본 불러오기 완료");
@@ -504,6 +511,7 @@ JSON만 반환:
         }
       });
 
+      setNaverHtml("");
       setGenerated({
         ...parsed,
         sections: groupedSections,
@@ -550,6 +558,113 @@ JSON만 반환:
     generated?.sections?.find((section) => section.images?.length)?.images?.[0] ||
     null;
 
+  const escapeHtml = (value = "") => {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  };
+
+  const getImageWidth = () => {
+    if (imageSizeMode === "small") return "520";
+    if (imageSizeMode === "medium") return "720";
+    return "100%";
+  };
+
+  const getGap = () => {
+    if (paragraphGapMode === "compact") return "12px";
+    if (paragraphGapMode === "wide") return "32px";
+    return "22px";
+  };
+
+  const naturalizeText = (text = "") => {
+    const endings = {
+      info: [],
+      natural: ["근데 이게 생각보다 괜찮더라고.", "이 부분은 은근 참고할 만했어.", "개인적으로는 이 포인트가 제일 기억에 남았어."],
+      emotional: ["분위기가 꽤 좋아서 사진을 계속 찍게 되더라고.", "이런 순간 때문에 또 가고 싶어지는 것 같아.", "가볍게 다녀왔는데 기억은 오래 남는 느낌이었어."],
+    };
+
+    const extra = endings[toneMode] || [];
+    const parts = String(text)
+      .split(/(?<=[.!?。]|다\.|요\.|어\.|네\.|음\.)\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!parts.length) return "";
+
+    const result = [];
+    parts.forEach((part, index) => {
+      result.push(part);
+      if (extra.length && index > 0 && index % 4 === 0) {
+        result.push(extra[index % extra.length]);
+      }
+    });
+
+    return result.join("\n\n");
+  };
+
+  const paragraphToHtml = (text = "") => {
+    return naturalizeText(text)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `<p style="font-size:16px; line-height:1.85; margin:0 0 ${getGap()} 0;">${escapeHtml(line)}</p>`)
+      .join("\n");
+  };
+
+  const imageToHtml = (image, alt = "블로그 이미지") => {
+    if (!image?.url) return "";
+    const width = getImageWidth();
+    const widthStyle = width === "100%" ? "width:100%; max-width:100%;" : `width:${width}px; max-width:100%;`;
+    return `<p style="margin:0 0 ${getGap()} 0; text-align:center;"><img src="${image.url}" alt="${escapeHtml(alt)}" style="${widthStyle} height:auto; border-radius:12px;" /></p>`;
+  };
+
+  const generateNaverHtml = () => {
+    if (!generated) {
+      setStatus("AI 초안 생성 후 네이버 HTML을 만들 수 있습니다.");
+      return;
+    }
+
+    const sectionsHtml = (generated.sections || [])
+      .map((section) => {
+        const imagesHtml = (section.images || [])
+          .map((image, index) => imageToHtml(image, `${section.subtitle || "섹션 이미지"} ${index + 1}`))
+          .join("\n");
+
+        return `
+<h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">${escapeHtml(section.subtitle || "")}</h2>
+${imagesHtml}
+${paragraphToHtml(section.content || "")}
+`;
+      })
+      .join("\n");
+
+    const tags = (generated.tags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" ");
+
+    const html = `
+<div style="max-width:860px; margin:0 auto; font-family:Arial, sans-serif; color:#222;">
+  ${titleImage ? imageToHtml(titleImage, "대표 이미지") : ""}
+  <h1 style="font-size:28px; line-height:1.35; margin:20px 0 24px 0; font-weight:800;">${escapeHtml(generated.title || "")}</h1>
+  ${paragraphToHtml(generated.intro || "")}
+  ${sectionsHtml}
+  <h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">총평</h2>
+  ${paragraphToHtml(generated.conclusion || "")}
+  <p style="font-size:15px; line-height:1.8; margin:28px 0 0 0; color:#555;">${escapeHtml(tags)}</p>
+</div>
+`.trim();
+
+    setNaverHtml(html);
+    setHtmlCopied(false);
+    setStatus("네이버용 HTML 생성 완료");
+  };
+
+  const copyNaverHtml = async () => {
+    if (!naverHtml) return;
+    await navigator.clipboard.writeText(naverHtml);
+    setHtmlCopied(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-3 text-slate-900 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -579,7 +694,7 @@ JSON만 반환:
               >
                 <div className="mb-2 text-2xl">⬆️</div>
                 <p className="text-sm text-slate-600">사진·동영상을 추가하세요.</p>
-                <p className="mt-1 text-xs text-slate-400">사진은 최대 980px로 압축됩니다.</p>
+                <p className="mt-1 text-xs text-slate-400">사진은 가로 최대 1000px 기준으로 압축됩니다.</p>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   <label className="cursor-pointer rounded-xl bg-slate-900 p-3 text-sm font-semibold text-white">
                     갤러리에서 선택
@@ -860,6 +975,94 @@ JSON만 반환:
                   </div>
                 ))}
               </div>
+            </Card>
+
+            <Card>
+              <h2 className="mb-3 text-lg font-bold">네이버 HTML 생성</h2>
+
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                {[
+                  { value: "full", label: "꽉차게" },
+                  { value: "medium", label: "중간" },
+                  { value: "small", label: "작게" },
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setImageSizeMode(item.value)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+                      imageSizeMode === item.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                {[
+                  { value: "compact", label: "촘촘" },
+                  { value: "normal", label: "기본" },
+                  { value: "wide", label: "넓게" },
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setParagraphGapMode(item.value)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+                      paragraphGapMode === item.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                {[
+                  { value: "info", label: "정보형" },
+                  { value: "natural", label: "자연형" },
+                  { value: "emotional", label: "감성형" },
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setToneMode(item.value)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+                      toneMode === item.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={generateNaverHtml} disabled={!generated}>
+                  네이버 HTML 생성
+                </Button>
+                <Button kind="light" onClick={copyNaverHtml} disabled={!naverHtml}>
+                  {htmlCopied ? "HTML 복사됨" : "HTML 복사"}
+                </Button>
+              </div>
+
+              {naverHtml && (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl border bg-white p-4">
+                    <div className="mb-2 text-sm font-semibold text-slate-700">HTML 미리보기</div>
+                    <div
+                      className="prose max-w-none rounded-xl bg-slate-50 p-4"
+                      dangerouslySetInnerHTML={{ __html: naverHtml }}
+                    />
+                  </div>
+
+                  <textarea
+                    value={naverHtml}
+                    readOnly
+                    className="h-40 w-full rounded-xl border bg-slate-50 p-3 text-xs text-slate-600"
+                  />
+                </div>
+              )}
             </Card>
 
             <Card>
