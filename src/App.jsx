@@ -9,6 +9,62 @@ function Button({ children, onClick, disabled, kind = "dark", className = "" }) 
   };
 
 
+  const buildNaverHtmlValue = () => {
+    if (!generated) return "";
+
+    const sectionsHtml = (generated.sections || [])
+      .map((section) => {
+        const imagesHtml = (section.images || [])
+          .map((image, index) => imageToHtml(image, `${section.subtitle || "섹션 이미지"} ${index + 1}`))
+          .join("
+");
+
+        return `
+<h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">${escapeHtml(section.subtitle || "")}</h2>
+${imagesHtml}
+${paragraphToHtml(section.content || "")}
+`;
+      })
+      .join("
+");
+
+    const tags = (generated.tags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" ");
+
+    return `
+<div style="max-width:860px; margin:0 auto; font-family:Arial, sans-serif; color:#222;">
+  ${titleImage ? imageToHtml(titleImage, "대표 이미지") : ""}
+  <h1 style="font-size:28px; line-height:1.35; margin:20px 0 24px 0; font-weight:800;">${escapeHtml(generated.title || "")}</h1>
+  ${paragraphToHtml(generated.intro || "")}
+  ${sectionsHtml}
+  <h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">총평</h2>
+  ${paragraphToHtml(generated.conclusion || "")}
+  <p style="font-size:15px; line-height:1.8; margin:28px 0 0 0; color:#555;">${escapeHtml(tags)}</p>
+</div>
+`.trim();
+  };
+
+  const checkLocalServer = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/status");
+      const data = await response.json();
+      setStatus(data.message || "로컬 서버 연결됨");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. naver-automation 폴더의 start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
+  const openAutomationBrowser = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/open-browser?write=1", {
+        method: "POST",
+      });
+      const data = await response.json();
+      setStatus(data.message || "자동화 브라우저 열기 완료");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
   const sendToLocalAutomation = async () => {
     if (!generated) {
       setStatus("AI 초안 생성 후 전송 가능합니다.");
@@ -16,6 +72,10 @@ function Button({ children, onClick, disabled, kind = "dark", className = "" }) 
     }
 
     try {
+      const html = buildNaverHtmlValue();
+      setNaverHtml(html);
+      setHtmlCopied(false);
+
       const imageMedia = media.filter((item) => item.type === "image");
 
       const payload = {
@@ -24,11 +84,46 @@ function Button({ children, onClick, disabled, kind = "dark", className = "" }) 
         titleImageId: selectedTitleImageId,
         titleImage: titleImage || null,
         memo,
-        html: naverHtml || "",
+        html,
         generated,
         media: imageMedia,
         tags: generated.tags || [],
       };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 HTML 생성 + 자동입력 프로그램 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. start-server.bat 실행 필요");
+    }
+  };
+
+  const runLocalAutomation = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/run-automation", {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "자동입력 실행 실패");
+      }
+
+      setStatus(data.message || "자동입력 실행 시작");
+    } catch (error) {
+      setStatus(error.message || "자동입력 실행 실패. 로컬 서버가 켜져 있는지 확인하세요.");
+    }
+  };
 
       const response = await fetch("http://localhost:3333/receive-post", {
         method: "POST",
@@ -742,6 +837,62 @@ ${paragraphToHtml(section.content || "")}
   };
 
 
+  const buildNaverHtmlValue = () => {
+    if (!generated) return "";
+
+    const sectionsHtml = (generated.sections || [])
+      .map((section) => {
+        const imagesHtml = (section.images || [])
+          .map((image, index) => imageToHtml(image, `${section.subtitle || "섹션 이미지"} ${index + 1}`))
+          .join("
+");
+
+        return `
+<h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">${escapeHtml(section.subtitle || "")}</h2>
+${imagesHtml}
+${paragraphToHtml(section.content || "")}
+`;
+      })
+      .join("
+");
+
+    const tags = (generated.tags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" ");
+
+    return `
+<div style="max-width:860px; margin:0 auto; font-family:Arial, sans-serif; color:#222;">
+  ${titleImage ? imageToHtml(titleImage, "대표 이미지") : ""}
+  <h1 style="font-size:28px; line-height:1.35; margin:20px 0 24px 0; font-weight:800;">${escapeHtml(generated.title || "")}</h1>
+  ${paragraphToHtml(generated.intro || "")}
+  ${sectionsHtml}
+  <h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">총평</h2>
+  ${paragraphToHtml(generated.conclusion || "")}
+  <p style="font-size:15px; line-height:1.8; margin:28px 0 0 0; color:#555;">${escapeHtml(tags)}</p>
+</div>
+`.trim();
+  };
+
+  const checkLocalServer = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/status");
+      const data = await response.json();
+      setStatus(data.message || "로컬 서버 연결됨");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. naver-automation 폴더의 start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
+  const openAutomationBrowser = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/open-browser?write=1", {
+        method: "POST",
+      });
+      const data = await response.json();
+      setStatus(data.message || "자동화 브라우저 열기 완료");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
   const sendToLocalAutomation = async () => {
     if (!generated) {
       setStatus("AI 초안 생성 후 전송 가능합니다.");
@@ -749,6 +900,10 @@ ${paragraphToHtml(section.content || "")}
     }
 
     try {
+      const html = buildNaverHtmlValue();
+      setNaverHtml(html);
+      setHtmlCopied(false);
+
       const imageMedia = media.filter((item) => item.type === "image");
 
       const payload = {
@@ -757,11 +912,46 @@ ${paragraphToHtml(section.content || "")}
         titleImageId: selectedTitleImageId,
         titleImage: titleImage || null,
         memo,
-        html: naverHtml || "",
+        html,
         generated,
         media: imageMedia,
         tags: generated.tags || [],
       };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 HTML 생성 + 자동입력 프로그램 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. start-server.bat 실행 필요");
+    }
+  };
+
+  const runLocalAutomation = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/run-automation", {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "자동입력 실행 실패");
+      }
+
+      setStatus(data.message || "자동입력 실행 시작");
+    } catch (error) {
+      setStatus(error.message || "자동입력 실행 실패. 로컬 서버가 켜져 있는지 확인하세요.");
+    }
+  };
 
       const response = await fetch("http://localhost:3333/receive-post", {
         method: "POST",
@@ -872,6 +1062,62 @@ ${paragraphToHtml(section.content || "")}
                   const thumbs = mediaItems.slice(0, 6);
 
                 
+  const buildNaverHtmlValue = () => {
+    if (!generated) return "";
+
+    const sectionsHtml = (generated.sections || [])
+      .map((section) => {
+        const imagesHtml = (section.images || [])
+          .map((image, index) => imageToHtml(image, `${section.subtitle || "섹션 이미지"} ${index + 1}`))
+          .join("
+");
+
+        return `
+<h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">${escapeHtml(section.subtitle || "")}</h2>
+${imagesHtml}
+${paragraphToHtml(section.content || "")}
+`;
+      })
+      .join("
+");
+
+    const tags = (generated.tags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" ");
+
+    return `
+<div style="max-width:860px; margin:0 auto; font-family:Arial, sans-serif; color:#222;">
+  ${titleImage ? imageToHtml(titleImage, "대표 이미지") : ""}
+  <h1 style="font-size:28px; line-height:1.35; margin:20px 0 24px 0; font-weight:800;">${escapeHtml(generated.title || "")}</h1>
+  ${paragraphToHtml(generated.intro || "")}
+  ${sectionsHtml}
+  <h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">총평</h2>
+  ${paragraphToHtml(generated.conclusion || "")}
+  <p style="font-size:15px; line-height:1.8; margin:28px 0 0 0; color:#555;">${escapeHtml(tags)}</p>
+</div>
+`.trim();
+  };
+
+  const checkLocalServer = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/status");
+      const data = await response.json();
+      setStatus(data.message || "로컬 서버 연결됨");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. naver-automation 폴더의 start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
+  const openAutomationBrowser = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/open-browser?write=1", {
+        method: "POST",
+      });
+      const data = await response.json();
+      setStatus(data.message || "자동화 브라우저 열기 완료");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
   const sendToLocalAutomation = async () => {
     if (!generated) {
       setStatus("AI 초안 생성 후 전송 가능합니다.");
@@ -879,6 +1125,10 @@ ${paragraphToHtml(section.content || "")}
     }
 
     try {
+      const html = buildNaverHtmlValue();
+      setNaverHtml(html);
+      setHtmlCopied(false);
+
       const imageMedia = media.filter((item) => item.type === "image");
 
       const payload = {
@@ -887,11 +1137,46 @@ ${paragraphToHtml(section.content || "")}
         titleImageId: selectedTitleImageId,
         titleImage: titleImage || null,
         memo,
-        html: naverHtml || "",
+        html,
         generated,
         media: imageMedia,
         tags: generated.tags || [],
       };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 HTML 생성 + 자동입력 프로그램 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. start-server.bat 실행 필요");
+    }
+  };
+
+  const runLocalAutomation = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/run-automation", {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "자동입력 실행 실패");
+      }
+
+      setStatus(data.message || "자동입력 실행 시작");
+    } catch (error) {
+      setStatus(error.message || "자동입력 실행 실패. 로컬 서버가 켜져 있는지 확인하세요.");
+    }
+  };
 
       const response = await fetch("http://localhost:3333/receive-post", {
         method: "POST",
@@ -1054,6 +1339,62 @@ ${paragraphToHtml(section.content || "")}
                   const isSelected = selectedTitleImageId === item.id;
 
                 
+  const buildNaverHtmlValue = () => {
+    if (!generated) return "";
+
+    const sectionsHtml = (generated.sections || [])
+      .map((section) => {
+        const imagesHtml = (section.images || [])
+          .map((image, index) => imageToHtml(image, `${section.subtitle || "섹션 이미지"} ${index + 1}`))
+          .join("
+");
+
+        return `
+<h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">${escapeHtml(section.subtitle || "")}</h2>
+${imagesHtml}
+${paragraphToHtml(section.content || "")}
+`;
+      })
+      .join("
+");
+
+    const tags = (generated.tags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" ");
+
+    return `
+<div style="max-width:860px; margin:0 auto; font-family:Arial, sans-serif; color:#222;">
+  ${titleImage ? imageToHtml(titleImage, "대표 이미지") : ""}
+  <h1 style="font-size:28px; line-height:1.35; margin:20px 0 24px 0; font-weight:800;">${escapeHtml(generated.title || "")}</h1>
+  ${paragraphToHtml(generated.intro || "")}
+  ${sectionsHtml}
+  <h2 style="font-size:22px; line-height:1.4; margin:36px 0 16px 0; font-weight:700;">총평</h2>
+  ${paragraphToHtml(generated.conclusion || "")}
+  <p style="font-size:15px; line-height:1.8; margin:28px 0 0 0; color:#555;">${escapeHtml(tags)}</p>
+</div>
+`.trim();
+  };
+
+  const checkLocalServer = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/status");
+      const data = await response.json();
+      setStatus(data.message || "로컬 서버 연결됨");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. naver-automation 폴더의 start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
+  const openAutomationBrowser = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/open-browser?write=1", {
+        method: "POST",
+      });
+      const data = await response.json();
+      setStatus(data.message || "자동화 브라우저 열기 완료");
+    } catch (error) {
+      setStatus("로컬 서버가 꺼져 있습니다. start-server.bat을 먼저 실행하세요.");
+    }
+  };
+
   const sendToLocalAutomation = async () => {
     if (!generated) {
       setStatus("AI 초안 생성 후 전송 가능합니다.");
@@ -1061,6 +1402,10 @@ ${paragraphToHtml(section.content || "")}
     }
 
     try {
+      const html = buildNaverHtmlValue();
+      setNaverHtml(html);
+      setHtmlCopied(false);
+
       const imageMedia = media.filter((item) => item.type === "image");
 
       const payload = {
@@ -1069,11 +1414,46 @@ ${paragraphToHtml(section.content || "")}
         titleImageId: selectedTitleImageId,
         titleImage: titleImage || null,
         memo,
-        html: naverHtml || "",
+        html,
         generated,
         media: imageMedia,
         tags: generated.tags || [],
       };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 HTML 생성 + 자동입력 프로그램 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. start-server.bat 실행 필요");
+    }
+  };
+
+  const runLocalAutomation = async () => {
+    try {
+      const response = await fetch("http://localhost:3333/run-automation", {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "자동입력 실행 실패");
+      }
+
+      setStatus(data.message || "자동입력 실행 시작");
+    } catch (error) {
+      setStatus(error.message || "자동입력 실행 실패. 로컬 서버가 켜져 있는지 확인하세요.");
+    }
+  };
 
       const response = await fetch("http://localhost:3333/receive-post", {
         method: "POST",
@@ -1245,23 +1625,41 @@ ${paragraphToHtml(section.content || "")}
                 </Button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <Button
-                  kind="blue"
-                  onClick={exportNaverPostJson}
-                  disabled={!generated}
-                >
-                  JSON 다운로드
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button kind="light" onClick={checkLocalServer}>
+                  서버 상태확인
                 </Button>
-
-                <Button
-                  kind="dark"
-                  onClick={sendToLocalAutomation}
-                  disabled={!generated}
-                >
-                  자동입력으로 보내기
+                <Button kind="light" onClick={openAutomationBrowser}>
+                  자동화 브라우저 열기
                 </Button>
               </div>
+
+              <Button
+                kind="blue"
+                onClick={sendToLocalAutomation}
+                disabled={!generated}
+                className="mt-2 w-full"
+              >
+                HTML 생성 + 자동입력으로 보내기
+              </Button>
+
+              <Button
+                kind="dark"
+                onClick={runLocalAutomation}
+                disabled={!generated}
+                className="mt-2 w-full"
+              >
+                포스팅 자동입력 실행
+              </Button>
+
+              <Button
+                kind="light"
+                onClick={exportNaverPostJson}
+                disabled={!generated}
+                className="mt-2 w-full"
+              >
+                백업용 JSON 다운로드
+              </Button>
 
               {naverHtml && (
                 <div className="mt-4 space-y-3">
