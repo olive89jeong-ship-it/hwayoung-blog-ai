@@ -1,14 +1,14 @@
 # 화영의블로그자동화
 
-사진과 메모를 바탕으로 네이버 블로그용 초안을 만드는 React + Vite 프로젝트입니다.
+모바일 사진/동영상 임시저장, 와이파이 클라우드 업로드, PC 불러오기, AI 블로그 초안 생성을 위한 React + Vite 앱입니다.
 
-## 실행
+## Vercel 환경변수
 
-```bash
-npm install
-npm run dev
-```
+Firebase 사용 시 아래 값을 Vercel Environment Variables에 등록하세요.
 
-## 배포
-
-GitHub에 업로드한 뒤 Vercel에서 Import Project 하면 됩니다.
+- VITE_FIREBASE_API_KEY
+- VITE_FIREBASE_AUTH_DOMAIN
+- VITE_FIREBASE_PROJECT_ID
+- VITE_FIREBASE_STORAGE_BUCKET
+- VITE_FIREBASE_MESSAGING_SENDER_ID
+- VITE_FIREBASE_APP_ID
