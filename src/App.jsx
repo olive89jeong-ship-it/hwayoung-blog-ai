@@ -665,6 +665,41 @@ ${paragraphToHtml(section.content || "")}
     setHtmlCopied(true);
   };
 
+  const exportNaverPostJson = () => {
+    if (!generated) {
+      setStatus("AI 초안 생성 후 JSON을 내보낼 수 있습니다.");
+      return;
+    }
+
+    const imageMedia = media.filter((item) => item.type === "image");
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      title: generated.title || "",
+      titleImageId: selectedTitleImageId,
+      titleImage: titleImage || null,
+      memo,
+      html: naverHtml || "",
+      generated,
+      media: imageMedia,
+      tags: generated.tags || [],
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "naver-post.json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setStatus("네이버 자동입력용 JSON 다운로드 완료");
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-3 text-slate-900 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -1045,6 +1080,15 @@ ${paragraphToHtml(section.content || "")}
                   {htmlCopied ? "HTML 복사됨" : "HTML 복사"}
                 </Button>
               </div>
+
+              <Button
+                kind="blue"
+                onClick={exportNaverPostJson}
+                disabled={!generated}
+                className="mt-2 w-full"
+              >
+                네이버 자동입력용 JSON 다운로드
+              </Button>
 
               {naverHtml && (
                 <div className="mt-4 space-y-3">

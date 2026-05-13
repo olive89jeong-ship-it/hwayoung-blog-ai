@@ -1,0 +1,13 @@
+{
+  "name": "naver-blog-auto-fill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install-browser": "npx playwright install chromium",
+    "start": "node naver-auto-fill.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
