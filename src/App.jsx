@@ -8,6 +8,47 @@ function Button({ children, onClick, disabled, kind = "dark", className = "" }) 
     danger: "border border-red-200 bg-red-50 text-red-700",
   };
 
+
+  const sendToLocalAutomation = async () => {
+    if (!generated) {
+      setStatus("AI 초안 생성 후 전송 가능합니다.");
+      return;
+    }
+
+    try {
+      const imageMedia = media.filter((item) => item.type === "image");
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        title: generated.title || "",
+        titleImageId: selectedTitleImageId,
+        titleImage: titleImage || null,
+        memo,
+        html: naverHtml || "",
+        generated,
+        media: imageMedia,
+        tags: generated.tags || [],
+      };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 자동입력 프로그램으로 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. (npm run server)");
+    }
+  };
+
+
   return (
     <button
       type="button"
@@ -700,6 +741,47 @@ ${paragraphToHtml(section.content || "")}
     setStatus("네이버 자동입력용 JSON 다운로드 완료");
   };
 
+
+  const sendToLocalAutomation = async () => {
+    if (!generated) {
+      setStatus("AI 초안 생성 후 전송 가능합니다.");
+      return;
+    }
+
+    try {
+      const imageMedia = media.filter((item) => item.type === "image");
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        title: generated.title || "",
+        titleImageId: selectedTitleImageId,
+        titleImage: titleImage || null,
+        memo,
+        html: naverHtml || "",
+        generated,
+        media: imageMedia,
+        tags: generated.tags || [],
+      };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 자동입력 프로그램으로 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. (npm run server)");
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-slate-50 p-3 text-slate-900 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -789,7 +871,48 @@ ${paragraphToHtml(section.content || "")}
                   const mediaItems = draft.media || [];
                   const thumbs = mediaItems.slice(0, 6);
 
-                  return (
+                
+  const sendToLocalAutomation = async () => {
+    if (!generated) {
+      setStatus("AI 초안 생성 후 전송 가능합니다.");
+      return;
+    }
+
+    try {
+      const imageMedia = media.filter((item) => item.type === "image");
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        title: generated.title || "",
+        titleImageId: selectedTitleImageId,
+        titleImage: titleImage || null,
+        memo,
+        html: naverHtml || "",
+        generated,
+        media: imageMedia,
+        tags: generated.tags || [],
+      };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 자동입력 프로그램으로 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. (npm run server)");
+    }
+  };
+
+
+  return (
                     <div key={draft.id} className="rounded-xl border border-slate-200 p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -930,7 +1053,48 @@ ${paragraphToHtml(section.content || "")}
                 {media.map((item, index) => {
                   const isSelected = selectedTitleImageId === item.id;
 
-                  return (
+                
+  const sendToLocalAutomation = async () => {
+    if (!generated) {
+      setStatus("AI 초안 생성 후 전송 가능합니다.");
+      return;
+    }
+
+    try {
+      const imageMedia = media.filter((item) => item.type === "image");
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        title: generated.title || "",
+        titleImageId: selectedTitleImageId,
+        titleImage: titleImage || null,
+        memo,
+        html: naverHtml || "",
+        generated,
+        media: imageMedia,
+        tags: generated.tags || [],
+      };
+
+      const response = await fetch("http://localhost:3333/receive-post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("전송 실패");
+      }
+
+      setStatus("네이버 자동입력 프로그램으로 전송 완료");
+    } catch (error) {
+      setStatus("로컬 자동입력 프로그램이 실행중인지 확인하세요. (npm run server)");
+    }
+  };
+
+
+  return (
                     <div
                       key={item.id}
                       className={`relative overflow-hidden rounded-2xl border bg-slate-100 ${
@@ -1081,14 +1245,23 @@ ${paragraphToHtml(section.content || "")}
                 </Button>
               </div>
 
-              <Button
-                kind="blue"
-                onClick={exportNaverPostJson}
-                disabled={!generated}
-                className="mt-2 w-full"
-              >
-                네이버 자동입력용 JSON 다운로드
-              </Button>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <Button
+                  kind="blue"
+                  onClick={exportNaverPostJson}
+                  disabled={!generated}
+                >
+                  JSON 다운로드
+                </Button>
+
+                <Button
+                  kind="dark"
+                  onClick={sendToLocalAutomation}
+                  disabled={!generated}
+                >
+                  자동입력으로 보내기
+                </Button>
+              </div>
 
               {naverHtml && (
                 <div className="mt-4 space-y-3">
