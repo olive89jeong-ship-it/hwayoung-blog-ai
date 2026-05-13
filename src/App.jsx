@@ -211,7 +211,15 @@ export default function App() {
 
     await dbPut(id, draft);
     await refreshDrafts();
-    setStatus(`기기에 임시저장 완료 · 파일 ${media.length}개`);
+
+    const savedCount = media.length;
+    setTitle("");
+    setMemo("");
+    setMedia([]);
+    setGenerated(null);
+    setCopied(false);
+
+    setStatus(`기기에 임시저장 완료 · 파일 ${savedCount}개 · 새 글 작성 모드로 전환`);
   };
 
   const loadDraft = async (id) => {
@@ -236,14 +244,30 @@ export default function App() {
     setMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const cleanReferenceContent = (value = "") => {
+    return value
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<iframe[\s\S]*?<\/iframe>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 2500);
+  };
+
   const referenceText = referenceContents
     .map((text, idx) => {
-      const value = text.trim();
+      const value = cleanReferenceContent(text);
       if (!value) return "";
       return `참고 콘텐츠 ${idx + 1}:\n${value}`;
     })
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n\n")
+    .slice(0, 7500);
 
   const buildPrompt = () => {
     const templateLabel = templates.find((t) => t.id === template)?.label || "블로그 후기";
@@ -262,10 +286,11 @@ ${referenceText || "없음"}
 - 소제목에는 번호를 붙이지 않는다.
 - 아이 동반, 키즈, 가족 나들이 내용은 쓰지 않는다.
 - 남편과 데이트 방문 관점으로 쓴다.
-- 참고 콘텐츠의 위치, 가격, 메뉴, 주차, 꿀팁, 평가를 자연스럽게 녹인다.
+- 참고 콘텐츠에서 위치, 가격, 메뉴, 주차, 꿀팁, 평가만 요약해서 자연스럽게 녹인다.
+- iframe, 광고, 스크립트, 불필요한 HTML 내용은 무시한다.
 - 그대로 베끼지 말고 새 글로 재구성한다.
 - sections는 이미지 개수와 같게 만든다.
-- 서론은 400자 이상, 각 사진 섹션은 200자 이상, 결론은 300자 이상으로 작성한다.
+- 서론은 300자 이상, 각 사진 섹션은 150자 이상, 결론은 250자 이상으로 작성한다.
 
 JSON만 반환:
 {
@@ -443,20 +468,57 @@ JSON만 반환:
               <h2 className="mb-3 text-lg font-bold">기기 저장 목록</h2>
               {!drafts.length && <p className="text-sm text-slate-500">저장된 항목이 없습니다.</p>}
               <div className="space-y-2">
-                {drafts.map((draft) => (
-                  <div key={draft.id} className="rounded-xl border p-3">
-                    <div className="font-semibold">{draft.title}</div>
-                    <div className="text-xs text-slate-500">파일 {(draft.media || []).length}개</div>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <Button kind="light" onClick={() => loadDraft(draft.id)}>
-                        불러오기
-                      </Button>
-                      <Button kind="danger" onClick={() => deleteDraft(draft.id)}>
-                        삭제
-                      </Button>
+                {drafts.map((draft) => {
+                  const mediaItems = draft.media || [];
+                  const thumbs = mediaItems.slice(0, 6);
+
+                  return (
+                    <div key={draft.id} className="rounded-xl border border-slate-200 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">{draft.title}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">파일 {mediaItems.length}개</div>
+                        </div>
+
+                        <div className="flex shrink-0 gap-1">
+                          <button
+                            type="button"
+                            onClick={() => loadDraft(draft.id)}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
+                          >
+                            불러오기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteDraft(draft.id)}
+                            className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+
+                      {!!thumbs.length && (
+                        <div className="mt-2 flex gap-1 overflow-hidden">
+                          {thumbs.map((item, index) => (
+                            <div key={`${draft.id}-${index}`} className="h-[30px] w-[30px] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200">
+                              {item.type === "video" ? (
+                                <video src={item.url} className="h-[30px] w-[30px] object-cover" muted playsInline />
+                              ) : (
+                                <img src={item.url} className="h-[30px] w-[30px] object-cover" alt={`저장 썸네일 ${index + 1}`} />
+                              )}
+                            </div>
+                          ))}
+                          {mediaItems.length > 6 && (
+                            <div className="flex h-[30px] w-[30px] items-center justify-center rounded-md bg-slate-100 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                              +{mediaItems.length - 6}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
 
@@ -480,6 +542,9 @@ JSON만 반환:
                   </Button>
                 ))}
               </div>
+              <p className="mb-2 text-xs leading-5 text-slate-500">
+                참고 블로그 HTML을 붙여넣어도 됩니다. 단, 긴 iframe/광고 코드는 자동 제거하고 본문 일부만 AI에 전달합니다.
+              </p>
               <textarea
                 value={personalPrompt}
                 onChange={(e) => setPersonalPrompt(e.target.value)}
@@ -494,7 +559,7 @@ JSON만 반환:
                     next[idx] = e.target.value;
                     setReferenceContents(next);
                   }}
-                  placeholder={`참고 블로그 본문 ${idx + 1}`}
+                  placeholder={`참고 블로그 본문 ${idx + 1} · HTML 붙여넣기 가능, iframe/태그는 자동 제거`}
                   className="mb-2 min-h-24 w-full rounded-xl border p-3 text-sm"
                 />
               ))}
